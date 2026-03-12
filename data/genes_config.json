@@ -1,0 +1,21 @@
+{
+  "subtypes": {
+    "ECM": {
+      "genes": ["FBN1", "FBN2", "COL11A1", "COL11A2", "COL5A1", "COL1A1", "TGFBR1", "TGFBR2"],
+      "color": "#E74C3C"
+    },
+    "VERTEBRAL_DEV": {
+      "genes": ["TBX6", "MESP2", "DLL3", "PAX1", "LBX1"],
+      "color": "#3498DB"
+    },
+    "NEUROMUSCULAR": {
+      "genes": ["ROBO3", "NTF3", "KIF6", "CHD7"],
+      "color": "#2ECC71"
+    },
+    "CILIARY": {
+      "genes": ["ADGRG6", "POC5", "DSCAM"],
+      "color": "#9B59B6"
+    }
+  },
+  "control_color": "#95A5A6"
+}

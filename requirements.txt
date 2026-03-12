@@ -1,0 +1,9 @@
+biopython
+requests
+pandas
+scikit-learn
+umap-learn
+matplotlib
+seaborn
+scipy
+numpy
