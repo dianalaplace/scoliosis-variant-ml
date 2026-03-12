@@ -42,16 +42,19 @@ query VariantByRsid($rsid: String!, $dataset: DatasetId!) {
 # ──────────────── Real gnomAD API ────────────────
 
 def check_gnomad_available():
-    """Check if gnomAD API is reachable with a test query."""
+    """Check if gnomAD API is reachable."""
     try:
-        test_query = '{ meta { gnomad_version } }'
+        # Use a minimal valid introspection query
+        test_query = '{ __typename }'
         resp = requests.post(
             GNOMAD_API,
             json={"query": test_query},
-            timeout=10,
+            timeout=15,
             headers={"Content-Type": "application/json"},
         )
-        return resp.status_code == 200
+        # 200 = valid query, 400 = invalid query but API is up
+        # Both mean the API is reachable
+        return resp.status_code in (200, 400)
     except Exception:
         return False
 

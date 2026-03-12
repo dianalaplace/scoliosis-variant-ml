@@ -3,10 +3,13 @@
 # Step 02 will auto-detect gnomAD API and use real data if reachable.
 #
 # Usage:
-#   ./run_local.sh           # full pipeline
-#   ./run_local.sh --gnomad  # only re-run gnomAD + downstream (after ClinVar is done)
+#   ./run_local.sh           # full pipeline from scratch
+#   ./run_local.sh --gnomad  # only re-run gnomAD + downstream
+#   ./run_local.sh --from 04 # re-run from step 04 onward
 
 set -e
+
+cd "$(dirname "$0")"
 
 echo "=== Scoliosis Variant ML Pipeline ==="
 echo ""
@@ -16,12 +19,43 @@ pip install -q -r requirements.txt
 
 if [ "$1" == "--gnomad" ]; then
     echo "Re-running from gnomAD step..."
+
+    # Check that prerequisite data exists
+    if [ ! -f data/clinvar_scoliosis.csv ]; then
+        echo "ERROR: data/clinvar_scoliosis.csv not found!"
+        echo "Run ./run_local.sh (full pipeline) first."
+        exit 1
+    fi
+
+    CTRL_COUNT=$(ls data/clinvar_controls/set_*.csv 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$CTRL_COUNT" -eq 0 ]; then
+        echo "WARNING: No control sets found in data/clinvar_controls/"
+        echo "Running step 01b to fetch control sets first (~30 min)..."
+        echo ""
+        python 01b_fetch_controls.py
+    fi
+
     python 02_fetch_gnomad.py
     python 03_feature_engineering.py
     python 04_gene_level_features.py
     python 05_clustering.py
     python 06_enrichment.py
     python 07_figures.py
+    echo ""
+    echo "Done! Check results/figures/ for updated poster figures."
+    exit 0
+fi
+
+if [ "$1" == "--from" ]; then
+    STEP=${2:-04}
+    echo "Re-running from step $STEP..."
+    for s in 04 05 06 07; do
+        if [ "$(printf '%02d' "$STEP")" -le "$(printf '%02d' "$s")" ] 2>/dev/null || [ "$STEP" -le "$s" ] 2>/dev/null; then
+            echo ""
+            echo "Running step ${s}..."
+            python "$(printf '%02d' "$s")"_*.py
+        fi
+    done
     echo ""
     echo "Done! Check results/figures/ for updated poster figures."
     exit 0
