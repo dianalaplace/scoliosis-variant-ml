@@ -48,8 +48,8 @@ def load_gene_subtypes():
 
 
 def part_a_fisher(df_annotated):
-    """Fisher's exact test: rare variant enrichment per subtype."""
-    print("\n--- Part A: Fisher's Exact Test ---")
+    """Fisher's exact test: LoF enrichment per subtype vs others."""
+    print("\n--- Part A: Fisher's Exact Test (LoF enrichment) ---")
     results = []
 
     for subtype in SUBTYPES:
@@ -63,12 +63,13 @@ def part_a_fisher(df_annotated):
             print(f"  {subtype}: insufficient data, skipping")
             continue
 
-        rare_sub = int(sub_df["is_rare"].sum())
-        common_sub = len(sub_df) - rare_sub
-        rare_oth = int(oth_df["is_rare"].sum())
-        common_oth = len(oth_df) - rare_oth
+        # Use LoF enrichment instead of rare (all pathogenic are rare)
+        lof_sub = int(sub_df["is_lof"].sum())
+        non_lof_sub = len(sub_df) - lof_sub
+        lof_oth = int(oth_df["is_lof"].sum())
+        non_lof_oth = len(oth_df) - lof_oth
 
-        table = [[rare_sub, common_sub], [rare_oth, common_oth]]
+        table = [[lof_sub, non_lof_sub], [lof_oth, non_lof_oth]]
         odds_ratio, p_value = stats.fisher_exact(table, alternative="greater")
 
         # Bonferroni correction (n=4 tests)
@@ -84,16 +85,16 @@ def part_a_fisher(df_annotated):
             ci_lower, ci_upper = 0, float("inf")
 
         results.append({
-            "test": "fisher_rare_enrichment",
+            "test": "fisher_lof_enrichment",
             "subtype": subtype,
             "odds_ratio": odds_ratio,
             "ci_lower": ci_lower,
             "ci_upper": ci_upper,
             "p_value": p_value,
             "p_corrected": p_corrected,
-            "n_rare_subtype": rare_sub,
+            "n_lof_subtype": lof_sub,
             "n_total_subtype": len(sub_df),
-            "n_rare_others": rare_oth,
+            "n_lof_others": lof_oth,
             "n_total_others": len(oth_df),
             "significant": p_corrected < 0.05,
         })
