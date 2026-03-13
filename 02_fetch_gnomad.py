@@ -247,14 +247,23 @@ def main():
     print(f"  Saved to {output_path}", flush=True)
 
     # 2. Control sets
+    CONTROLS_DIR.mkdir(parents=True, exist_ok=True)
     control_files = sorted(CONTROLS_DIR.glob("set_*.csv"))
     print(f"\nProcessing {len(control_files)} control sets...", flush=True)
-    for cf in control_files:
-        df_ctrl = pd.read_csv(cf)
-        if len(df_ctrl) == 0:
-            continue
-        df_ctrl = process_dataframe(df_ctrl, use_real)
-        df_ctrl.to_csv(cf, index=False)
+
+    if len(control_files) == 0:
+        print("  ⚠️  No control sets found in data/clinvar_controls/", flush=True)
+        print("  Run 01b_fetch_controls.py first to generate them.", flush=True)
+        print("  (Or run ./run_local.sh for the full pipeline)", flush=True)
+    else:
+        for i, cf in enumerate(control_files):
+            df_ctrl = pd.read_csv(cf)
+            if len(df_ctrl) == 0:
+                continue
+            df_ctrl = process_dataframe(df_ctrl, use_real)
+            df_ctrl.to_csv(cf, index=False)
+            if (i + 1) % 10 == 0:
+                print(f"  Processed {i + 1}/{len(control_files)} sets", flush=True)
 
     source_label = "gnomAD v4 API" if use_real else "SIMULATED (run locally for real data)"
     print(f"\nDone! Source: {source_label}", flush=True)

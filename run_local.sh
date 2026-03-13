@@ -23,19 +23,43 @@ if [ "$1" == "--gnomad" ]; then
     # Check that prerequisite data exists
     if [ ! -f data/clinvar_scoliosis.csv ]; then
         echo "ERROR: data/clinvar_scoliosis.csv not found!"
-        echo "Run ./run_local.sh (full pipeline) first."
+        echo "You need to run the full pipeline first:"
+        echo "  ./run_local.sh"
         exit 1
     fi
 
-    CTRL_COUNT=$(ls data/clinvar_controls/set_*.csv 2>/dev/null | wc -l | tr -d ' ')
+    # Ensure control sets exist
+    mkdir -p data/clinvar_controls
+    CTRL_COUNT=$(find data/clinvar_controls -name "set_*.csv" -type f 2>/dev/null | wc -l | tr -d ' ')
+    echo "Control sets found: $CTRL_COUNT"
+
     if [ "$CTRL_COUNT" -eq 0 ]; then
-        echo "WARNING: No control sets found in data/clinvar_controls/"
-        echo "Running step 01b to fetch control sets first (~30 min)..."
         echo ""
+        echo "No control gene sets found. Need to generate them first."
+
+        if [ ! -f data/random_gene_sets.json ]; then
+            echo "Step 00: Generating random gene sets..."
+            python 00_random_controls.py
+        fi
+
+        echo "Step 01b: Fetching ClinVar for control gene sets (~30 min)..."
         python 01b_fetch_controls.py
+
+        CTRL_COUNT=$(find data/clinvar_controls -name "set_*.csv" -type f 2>/dev/null | wc -l | tr -d ' ')
+        echo "Control sets generated: $CTRL_COUNT"
+
+        if [ "$CTRL_COUNT" -eq 0 ]; then
+            echo "ERROR: Failed to generate control sets. Check 01b_fetch_controls.py output."
+            exit 1
+        fi
     fi
 
+    echo ""
+    echo "Step 02: gnomAD (~15 min for scoliosis, ~30 min for $CTRL_COUNT control sets)..."
     python 02_fetch_gnomad.py
+
+    echo ""
+    echo "Steps 03-07..."
     python 03_feature_engineering.py
     python 04_gene_level_features.py
     python 05_clustering.py
