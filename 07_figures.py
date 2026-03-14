@@ -21,6 +21,13 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+try:
+    from adjustText import adjust_text
+    HAS_ADJUST_TEXT = True
+except ImportError:
+    HAS_ADJUST_TEXT = False
+    print("  Note: pip install adjustText for better gene labels on UMAP")
+
 matplotlib.rcParams["font.size"] = 11
 matplotlib.rcParams["font.family"] = "sans-serif"
 matplotlib.rcParams["axes.linewidth"] = 0.8
@@ -40,12 +47,22 @@ COLORS = {
 }
 
 SUBTYPES = ["ECM", "VERTEBRAL_DEV", "NEUROMUSCULAR", "CILIARY"]
+SHORT_LABELS = {"ECM": "ECM", "VERTEBRAL_DEV": "Vert.Dev",
+                "NEUROMUSCULAR": "Neuromusc.", "CILIARY": "Ciliary",
+                "CONTROL": "Control"}
 FIGSIZE = (8, 5)
 DPI = 300
 
 
+def fmt_pvalue(p):
+    """Format p-value: p<0.001 instead of p=0.000."""
+    if p < 0.001:
+        return "p<0.001"
+    return f"p={p:.3f}"
+
+
 def fig1_variant_distribution(df):
-    """Stacked bar: variant type counts per subtype."""
+    """Two-panel stacked bar: A) absolute counts, B) normalized proportions."""
     print("  Creating Fig 1: Variant Distribution...")
 
     cons_types = ["missense", "nonsense", "frameshift", "splice",
@@ -60,36 +77,63 @@ def fig1_variant_distribution(df):
         "other": "#BDC3C7",
     }
 
-    fig, ax = plt.subplots(figsize=FIGSIZE)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
     # Count variants per subtype and consequence
     plot_data = {}
+    totals = {}
     for subtype in SUBTYPES:
         sub_df = df[df["subtype"] == subtype]
         counts = sub_df["consequence_cat"].value_counts()
         plot_data[subtype] = {ct: counts.get(ct, 0) for ct in cons_types}
+        totals[subtype] = len(sub_df)
 
     x = np.arange(len(SUBTYPES))
+    short = [SHORT_LABELS[s] for s in SUBTYPES]
     width = 0.6
-    bottoms = np.zeros(len(SUBTYPES))
 
+    # Panel A: Absolute counts
+    bottoms_a = np.zeros(len(SUBTYPES))
     for cons_type in cons_types:
         values = [plot_data[s].get(cons_type, 0) for s in SUBTYPES]
         if sum(values) == 0:
             continue
-        ax.bar(x, values, width, bottom=bottoms,
-               color=cons_colors.get(cons_type, "#BDC3C7"),
-               edgecolor="white", linewidth=0.5,
-               label=cons_type.capitalize())
-        bottoms += values
+        ax1.bar(x, values, width, bottom=bottoms_a,
+                color=cons_colors.get(cons_type, "#BDC3C7"),
+                edgecolor="white", linewidth=0.5,
+                label=cons_type.capitalize())
+        bottoms_a += values
 
-    ax.set_xticks(x)
-    ax.set_xticklabels(SUBTYPES, fontsize=10, rotation=15)
-    ax.set_ylabel("Number of Pathogenic Variants", fontsize=11)
-    ax.set_title("Variant Type Distribution by Scoliosis Subtype",
-                 fontsize=12, fontweight="bold")
-    ax.legend(fontsize=9, bbox_to_anchor=(1.02, 1), loc="upper left",
-              frameon=True, fancybox=True)
+    # Add n= annotations
+    for i, subtype in enumerate(SUBTYPES):
+        ax1.text(i, bottoms_a[i] + 10, f"n={totals[subtype]}",
+                 ha="center", va="bottom", fontsize=9, fontweight="bold")
+
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(short, fontsize=10)
+    ax1.set_ylabel("Number of Pathogenic Variants", fontsize=11)
+    ax1.set_title("A. Variant Counts", fontsize=12, fontweight="bold")
+    ax1.legend(fontsize=8, bbox_to_anchor=(1.02, 1), loc="upper left",
+               frameon=True, fancybox=True)
+
+    # Panel B: Normalized 100%
+    bottoms_b = np.zeros(len(SUBTYPES))
+    for cons_type in cons_types:
+        values_raw = [plot_data[s].get(cons_type, 0) for s in SUBTYPES]
+        values_pct = [v / totals[s] * 100 if totals[s] > 0 else 0
+                      for v, s in zip(values_raw, SUBTYPES)]
+        if sum(values_raw) == 0:
+            continue
+        ax2.bar(x, values_pct, width, bottom=bottoms_b,
+                color=cons_colors.get(cons_type, "#BDC3C7"),
+                edgecolor="white", linewidth=0.5)
+        bottoms_b += values_pct
+
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(short, fontsize=10)
+    ax2.set_ylabel("Proportion (%)", fontsize=11)
+    ax2.set_title("B. Variant Type Proportions", fontsize=12, fontweight="bold")
+    ax2.set_ylim(0, 105)
 
     plt.tight_layout()
     plt.savefig(FIG_DIR / "fig1_variant_distribution.png", dpi=DPI,
@@ -115,21 +159,26 @@ def fig2_umap(df_genes):
                    label="Control genes", zorder=1)
 
     # Scoliosis genes
+    texts = []
     for subtype in SUBTYPES:
         subset = df_genes[df_genes["subtype"] == subtype]
         if len(subset) == 0:
             continue
         ax.scatter(subset["umap_1"], subset["umap_2"],
                    c=COLORS[subtype], s=90, edgecolors="black",
-                   linewidth=0.6, label=subtype, zorder=2)
+                   linewidth=0.6, label=SHORT_LABELS.get(subtype, subtype),
+                   zorder=2)
         for _, row in subset.iterrows():
-            ax.annotate(
-                row["gene"],
-                (row["umap_1"], row["umap_2"]),
-                fontsize=7, ha="center", va="bottom",
-                xytext=(0, 6), textcoords="offset points",
-                fontweight="bold",
-            )
+            t = ax.text(row["umap_1"], row["umap_2"], row["gene"],
+                        fontsize=7, fontweight="bold", ha="center", va="bottom")
+            texts.append(t)
+
+    # Spread overlapping labels
+    if HAS_ADJUST_TEXT and texts:
+        adjust_text(texts, ax=ax,
+                    arrowprops=dict(arrowstyle="-", color="gray", lw=0.5),
+                    force_text=(0.8, 0.8), force_points=(0.3, 0.3),
+                    expand=(1.5, 1.5))
 
     ax.set_xlabel("UMAP 1", fontsize=11)
     ax.set_ylabel("UMAP 2", fontsize=11)
@@ -177,7 +226,7 @@ def fig3_permutation(df):
     for subtype in SUBTYPES:
         if subtype in subtype_af:
             p_emp = (control_af_means <= subtype_af[subtype]).sum() / len(control_af_means)
-            label = f"{subtype} (p={p_emp:.3f})"
+            label = f"{SHORT_LABELS.get(subtype, subtype)} ({fmt_pvalue(p_emp)})"
             ax.axvline(subtype_af[subtype], color=COLORS[subtype],
                        linewidth=2.5, linestyle="--", label=label)
 
@@ -282,21 +331,24 @@ def fig5_lof_enrichment(df):
     ctrl_median = np.median(ctrl_lof) if ctrl_lof else 0
     ctrl_std = np.std(ctrl_lof) if ctrl_lof else 0
 
-    bar_x = SUBTYPES + ["CONTROL"]
+    bar_labels_raw = SUBTYPES + ["CONTROL"]
+    n_ctrl = len(ctrl_lof)
+    bar_labels = [SHORT_LABELS[s] for s in SUBTYPES] + [f"Control\n(n={n_ctrl} sets)"]
     bar_vals = [lof_pcts.get(s, 0) for s in SUBTYPES] + [ctrl_median]
     bar_errs = [0] * len(SUBTYPES) + [ctrl_std]
-    bar_cols = [COLORS[s] for s in bar_x]
+    bar_cols = [COLORS[s] for s in bar_labels_raw]
 
-    bars = ax1.bar(bar_x, bar_vals, color=bar_cols,
+    bars = ax1.bar(range(len(bar_vals)), bar_vals, color=bar_cols,
                    edgecolor="black", linewidth=0.5,
                    yerr=bar_errs, capsize=5)
     for bar, val in zip(bars, bar_vals):
         ax1.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1,
                  f"{val:.1f}%", ha="center", va="bottom", fontsize=9)
 
+    ax1.set_xticks(range(len(bar_labels)))
+    ax1.set_xticklabels(bar_labels, fontsize=10)
     ax1.set_ylabel("Loss-of-Function variants (%)", fontsize=11)
     ax1.set_title("A. LoF Variant Fraction", fontsize=12, fontweight="bold")
-    ax1.tick_params(axis="x", rotation=15)
 
     # Right panel: Fisher OR with CI
     fisher_data = []
@@ -350,14 +402,14 @@ def fig5_lof_enrichment(df):
                      fmt="none", color="black", capsize=5, linewidth=1.5)
         ax2.axvline(1.0, color="gray", linestyle="--", linewidth=1)
         ax2.set_yticks(y_pos)
-        ax2.set_yticklabels(labels, fontsize=10)
+        ax2.set_yticklabels([SHORT_LABELS.get(l, l) for l in labels], fontsize=10)
         ax2.set_xlabel("Odds Ratio (LoF enrichment)", fontsize=11)
         ax2.set_title("B. Fisher's Exact Test — LoF OR",
                       fontsize=12, fontweight="bold")
 
         # Add p-value annotations
         for i, d in enumerate(fisher_data):
-            p_text = f"p={d['p']:.3f}"
+            p_text = fmt_pvalue(d["p"])
             ax2.text(d["ci_upper"] + 0.1, i, p_text, va="center", fontsize=9)
 
     plt.tight_layout()
