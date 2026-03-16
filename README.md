@@ -1,9 +1,5 @@
 # scoliosis-variant-ml
 
-> ML pipeline for identifying pathogenic variant signatures in scoliosis-associated genes.
-
-Replacement test# scoliosis-variant-ml
-
 > ML pipeline for identifying pathogenic variant signatures in scoliosis-associated genes using ClinVar, gnomAD, and unsupervised learning.
 
 ## Overview
@@ -73,8 +69,8 @@ python 07_figures.py
 
 ```
 scoliosis-variant-ml/
-├── data/                  # Raw and processed variant data (CSV)
-├── results/               # Clustering outputs, enrichment scores, figures
+├── data/                     Raw and processed variant data (CSV)
+├── results/                  Clustering outputs, enrichment scores, figures
 ├── 00_random_controls.py
 ├── 01_fetch_clinvar.py
 ├── 01b_fetch_controls.py
